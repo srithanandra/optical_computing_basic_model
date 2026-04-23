@@ -1,65 +1,72 @@
 import time
+import argparse
+from pathlib import Path
 
+import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from torchvision.transforms import ToTensor
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def main() -> None:
     start = time.time()
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"DEVICE: USING {device} DEVICE\n")
-
-    training_data = datasets.MNIST(
-        root="data",
-        train=True,
-        download=True,
-        transform=ToTensor(),
+    parser = argparse.ArgumentParser(description='Train a simple MLP on geometry vectors.')
+    parser.add_argument(
+        '--data-path',
+        type=str,
+        default=str(Path('data') / 'geometry_compiled.npy'),
+        help='Path to geometry_compiled.npy (shape: [N, 8]).',
     )
-    test_data = datasets.MNIST(
-        root="data",
-        train=False,
-        download=True,
-        transform=ToTensor(),
-    )
+    parser.add_argument('--batch-size', type=int, default=64)
+    parser.add_argument('--epochs', type=int, default=3)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    args = parser.parse_args()
 
-    batch_size = 64
-    train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_data, batch_size=batch_size)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f'DEVICE: USING {device} DEVICE\n')
 
-    print("-------------- DATA SHAPE ----------------")
+    data_path = Path(args.data_path)
+    x_np = np.load(data_path)
+    if x_np.ndim != 2 or x_np.shape[1] != 8:
+        raise ValueError(f'Expected .npy with shape (N, 8); got {x_np.shape}')
+
+    # For now: use the full dataset as BOTH train and test.
+    # Targets are set to X so the model learns an identity mapping (sanity-check training loop).
+    X = torch.tensor(x_np, dtype=torch.float32)
+    y = X.clone()
+    dataset = TensorDataset(X, y)
+    train_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    test_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
+
+    print('-------------- DATA SHAPE ----------------')
     for X, y in test_dataloader:
-        print(f"Shape of X [N, C, H, W]: {X.shape}")
-        print(f"Shape of y: {y.shape} {y.dtype}")
+        print(f'Shape of X [N, 8]: {X.shape}')
+        print(f'Shape of y [N, 8]: {y.shape} {y.dtype}')
         break
-    print("------------------------------------------\n")
+    print('------------------------------------------\n')
 
     class NeuralNetwork(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.flatten = nn.Flatten()
             self.linear_relu_stack = nn.Sequential(
-                nn.Linear(28 * 28, 128),
+                nn.Linear(8, 64),
                 nn.ReLU(),
-                nn.Linear(128, 64),
+                nn.Linear(64, 64),
                 nn.ReLU(),
-                nn.Linear(64, 10),
+                nn.Linear(64, 8),
             )
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-            x = self.flatten(x)
             return self.linear_relu_stack(x)
 
     model = NeuralNetwork().to(device)
-    print("---------------------- MODEL ---------------------")
+    print('---------------------- MODEL ---------------------')
     print(model)
-    print("-------------------------------------------------\n")
+    print('-------------------------------------------------\n')
 
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    loss_fn = nn.MSELoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     def train_epoch() -> None:
         model.train()
@@ -76,41 +83,39 @@ def main() -> None:
 
             if batch % 200 == 0:
                 current = (batch + 1) * len(X)
-                print(f"loss: {loss.item():>7f}  [{current:>5d}/{size:>5d}]")
+                print(f'loss: {loss.item():>7f}  [{current:>5d}/{size:>5d}]')
 
     def evaluate() -> None:
         model.eval()
         size = len(test_dataloader.dataset)
         num_batches = len(test_dataloader)
-        test_loss, correct = 0.0, 0.0
+        test_loss = 0.0
         with torch.no_grad():
             for X, y in test_dataloader:
                 X, y = X.to(device), y.to(device)
                 pred = model(X)
                 test_loss += loss_fn(pred, y).item()
-                correct += (pred.argmax(1) == y).type(torch.float).sum().item()
 
         test_loss /= num_batches
-        correct /= size
-        print(f"Test Error:\n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f}\n")
+        print(f'Test Error:\n Avg loss: {test_loss:>8f}\n')
 
-    epochs = 3
-    for t in range(epochs):
-        print(f"Epoch {t + 1}:\n-------------------------------")
+    for t in range(args.epochs):
+        print(f'Epoch {t + 1}:\n-------------------------------')
         train_epoch()
         evaluate()
 
     model.eval()
-    x, y = test_data[0]
+    x, y = dataset[0]
     with torch.no_grad():
         x = x.to(device)
-        logits = model(x)
-        predicted = int(logits.argmax(1).item())
-        print(f"Single example prediction: predicted={predicted}, actual={int(y)}")
+        y_hat = model(x)
+        print('Single example (first 4 values):')
+        print(f'  x     = {x[:4].tolist()}')
+        print(f'  y_hat = {y_hat[:4].tolist()}')
 
-    print(f"\nTime spent: {time.time() - start:.2f} seconds")
+    print(f'\nTime spent: {time.time() - start:.2f} seconds')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
