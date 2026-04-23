@@ -6,6 +6,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from src.model import MLP
+
 
 def main() -> None:
     start = time.time()
@@ -37,21 +39,7 @@ def main() -> None:
         break
     print('------------------------------------------\n')
 
-    class NeuralNetwork(nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.linear_relu_stack = nn.Sequential(
-                nn.Linear(8, 64),
-                nn.ReLU(),
-                nn.Linear(64, 64),
-                nn.ReLU(),
-                nn.Linear(64, 8),
-            )
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.linear_relu_stack(x)
-
-    model = NeuralNetwork().to(device)
+    model = MLP().to(device)
     print('---------------------- MODEL ---------------------')
     print(model)
     print('-------------------------------------------------\n')
