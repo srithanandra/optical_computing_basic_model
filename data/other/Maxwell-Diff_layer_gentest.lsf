@@ -1,0 +1,156 @@
+status = layoutmode;
+if (status ==0) {
+    switchtolayout;
+}
+#for(x=0.5:0.5:1.5) {
+status = layoutmode;
+if (status ==0) {
+    switchtolayout;
+}
+select("Si layer");
+delete;
+select("diff layer");
+delete;
+select("hole1");
+delete;
+select("hole2");
+delete;
+select("hole3");
+delete;
+select("hole4");
+delete;
+#select("hole5");
+#delete;
+#select("hole6");
+#delete;
+#select("hole7");
+#delete;
+#select("hole8");
+#delete;
+
+#variables
+hole_radius = 1.5e-6;
+coord1 = ( 1 )*(10^-6);
+coord2 = ( 1 )*(10^-6);
+coord3 = ( 1 )*(10^-6);
+coord4 = ( 1 )*(10^-6);
+coord5 = ( 1 )*(10^-6);
+coord6 = ( 1 )*(10^-6);
+coord7 = ( 1 )*(10^-6);
+coord8 = ( 1 )*(10^-6);
+
+#constants
+xcoord1 = (coord1);
+ycoord1 = 0;
+xcoord2 = (coord2)/sqrt(2);
+ycoord2 = (coord2)/sqrt(2);
+xcoord3 = -(coord3)/sqrt(2);
+ycoord3 = (coord3)/sqrt(2);
+xcoord4 = -(coord4);
+ycoord4 = 0;
+#xcoord5 = -(coord5)/sqrt(2);
+#ycoord5 = -(coord5)/sqrt(2);
+#xcoord6 = (coord6)/sqrt(2);
+#ycoord6 = -(coord6)/sqrt(2);
+#xcoord7 = (coord7)*((sqrt(2-sqrt(2)))/2);
+#ycoord7 = -(coord7)*((sqrt(2+sqrt(2)))/2);
+#xcoord8 = (coord8)*((sqrt(2+sqrt(2)))/2);
+#ycoord8 = -(coord8)*((sqrt(2-sqrt(2)))/2);
+
+addrect;
+set("name", "Si layer");
+set("x", 0);
+set("x span", 10e-6);
+set("y", 0);
+set("y span", 10e-6);
+set("z", -2.5e-6);
+set("z span", 5e-6);
+set("material", "Si (Silicon) - Palik");
+
+addrect;
+set("name", "diff layer");
+set("x", 0);
+set("x span", 10e-6);
+set("y", 0);
+set("y span", 10e-6);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("material", "Moo3_All_RBs_base");
+
+
+addcircle;
+set("name", "hole3");
+set("x", xcoord3); 
+set("y", ycoord3);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+addcircle;
+set("name", "hole2");
+set("x", xcoord2);
+set("y", ycoord2);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+addcircle;
+set("name", "hole1");
+set("x", xcoord1);
+set("y", ycoord1);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+addcircle;
+set("name", "hole4");
+set("x", xcoord4);
+set("y", ycoord4);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+#addcircle;
+#set("name", "hole5");
+#set("x", xcoord5);
+#set("y", ycoord5);
+#set("z", 0.05e-6);
+#set("z span", 0.1e-6);
+#set("radius", 0.1e-6);
+#set("material", "etch");
+
+#addcircle;
+#set("name", "hole6");
+#set("x", xcoord6);
+#set("y", ycoord6);
+#set("z", 0.05e-6);
+#set("z span", 0.1e-6);
+#set("radius", 0.1e-6);
+#set("material", "etch");
+
+run;
+E=getresult("monitor_2","E");
+switchtolayout;
+pause(60);
+run;
+#for (x=1:1:100) {
+#?abs(abs(E.E(x)));
+#}
+#?E.lambda(1);
+#visualize(E);
+
+
+#recording coordinates in a .txt file
+#write("randcoord36.txt", "x coordinate, y coordinate", "overwrite");
+#write("randcoord36.txt", num2str(xcoord1)+", "+num2str(ycoord1));
+#write("randcoord36.txt", num2str(xcoord2)+", "+num2str(ycoord2));
+#write("randcoord36.txt", num2str(xcoord3)+", "+num2str(ycoord3));
+#write("randcoord36.txt", num2str(xcoord4)+", "+num2str(ycoord4));
+#write("randcoord36.txt", num2str(xcoord5)+", "+num2str(ycoord5));
+#write("randcoord36.txt", num2str(xcoord6)+", "+num2str(ycoord6));
+#write("randcoord36.txt", num2str(xcoord7)+", "+num2str(ycoord7));
+#write("randcoord36.txt", num2str(xcoord8)+", "+num2str(ycoord8));

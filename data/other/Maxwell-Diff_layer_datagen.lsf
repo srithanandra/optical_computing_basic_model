@@ -1,0 +1,158 @@
+#constants
+xcoord1 = 0;
+xcoord2 = 0;
+xcoord3 = 0;
+xcoord4 = 0;
+ycoord1 = 0;
+ycoord2 = 0;
+ycoord3 = 0;
+ycoord4 = 0;
+r1 = 0;
+r2 = 0;
+r3 = 0;
+r4 = 0;
+theta1 = 0;
+theta2 = 0;
+theta3 = 0;
+theta4 = 0;
+global_counter = 0;
+
+#for loops
+for(p1=0:1:2) { 
+    r1 = (p1 * 0.375e-6) + 0.25e-6;
+    for(p2=0:1:2) {
+        r2 = (p2 * 0.375e-6) + 0.25e-6;
+        for(p3=0:1:2) {
+            r3 = (p3 * 0.375e-6) + 0.25e-6;
+            for(p4=0:1:2) {
+                r4 = (p4 * 0.375e-6) + 0.25e-6;
+                for(p5=0:1:2) {
+                    theta1 = p5 * (pi/4);
+                    for(p6=0:1:2) {
+                        theta2 = (p6 * (pi/4)) + (pi/2);
+                        for(p7=0:1:2) {
+                            theta3 = (p7 * (pi/4)) + (pi);
+                            for(p8=0:1:2) {
+                                theta4 = (p8 * (pi/4)) + ((3/2)*(pi));
+
+#polar to cartesian for geometry purposes
+xcoord1 = r1 * cos(theta1);
+ycoord1 = r1 * sin(theta1);
+xcoord2 = r2 * cos(theta2);
+ycoord2 = r2 * sin(theta2);
+xcoord3 = r3 * cos(theta3);
+ycoord3 = r3 * sin(theta3);
+xcoord4 = r4 * cos(theta4);
+ycoord4 = r4 * sin(theta4);
+
+#switch to layout mode where geometry is able to be changed
+status = layoutmode;
+if (status ==0) {
+    switchtolayout;
+}
+
+select("Si layer");
+delete;
+select("diff layer");
+delete;
+select("hole1");
+delete;
+select("hole2");
+delete;
+select("hole3");
+delete;
+select("hole4");
+delete;
+
+addrect;
+set("name", "Si layer");
+set("x", 0);
+set("x span", 10e-6);
+set("y", 0);
+set("y span", 10e-6);
+set("z", -2.5e-6);
+set("z span", 5e-6);
+set("material", "Si (Silicon) - Palik");
+
+addrect;
+set("name", "diff layer");
+set("x", 0);
+set("x span", 10e-6);
+set("y", 0);
+set("y span", 10e-6);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("material", "Moo3_All_RBs_base");
+
+addcircle;
+set("name", "hole3");
+set("x", xcoord3); 
+set("y", ycoord3);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+addcircle;
+set("name", "hole2");
+set("x", xcoord2);
+set("y", ycoord2);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+addcircle;
+set("name", "hole1");
+set("x", xcoord1);
+set("y", ycoord1);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+addcircle;
+set("name", "hole4");
+set("x", xcoord4);
+set("y", ycoord4);
+set("z", 0.05e-6);
+set("z span", 0.1e-6);
+set("radius", 0.1e-6);
+set("material", "etch");
+
+#iterate global counter
+global_counter = global_counter + 1;
+
+#recording parameters in a .txt file
+write("parameter"+num2str(global_counter)+".txt", "radius (m), theta (radians)", "overwrite");
+write("parameter"+num2str(global_counter)+".txt", num2str(r1)+", "+num2str(theta1));
+write("parameter"+num2str(global_counter)+".txt", num2str(r2)+", "+num2str(theta2));
+write("parameter"+num2str(global_counter)+".txt", num2str(r3)+", "+num2str(theta3));
+write("parameter"+num2str(global_counter)+".txt", num2str(r4)+", "+num2str(theta4));
+
+#run the sim and fetch data from monitor
+run; 
+status_re = layoutmode;
+if (status_re ==1) { #checks to see if actually ran, otherwise selects sim and tries again
+    select("FDTD");
+    run;
+}
+E=getresult("monitor_2","E");
+
+#recording the data in a .txt file
+write("spectra"+num2str(global_counter)+".txt", "lambda (m), theta (radians)", "overwrite");
+for(x=1:1:100) {
+    string1 = num2str(E.lambda(x));
+    string2 = num2str(abs(abs(E.E(x))));
+    write("spectra"+num2str(global_counter)+".txt", string1+", "+string2);
+}
+
+#closing the 8 for loops
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

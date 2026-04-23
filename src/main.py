@@ -1,5 +1,4 @@
 import time
-import argparse
 from pathlib import Path
 
 import numpy as np
@@ -11,22 +10,14 @@ from torch.utils.data import DataLoader, TensorDataset
 def main() -> None:
     start = time.time()
 
-    parser = argparse.ArgumentParser(description='Train a simple MLP on geometry vectors.')
-    parser.add_argument(
-        '--data-path',
-        type=str,
-        default=str(Path('data') / 'geometry_compiled.npy'),
-        help='Path to geometry_compiled.npy (shape: [N, 8]).',
-    )
-    parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--epochs', type=int, default=3)
-    parser.add_argument('--lr', type=float, default=1e-3)
-    args = parser.parse_args()
+    data_path = Path('data') / 'geometry_compiled.npy'
+    batch_size = 64
+    epochs = 3
+    lr = 1e-3
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f'DEVICE: USING {device} DEVICE\n')
 
-    data_path = Path(args.data_path)
     x_np = np.load(data_path)
     if x_np.ndim != 2 or x_np.shape[1] != 8:
         raise ValueError(f'Expected .npy with shape (N, 8); got {x_np.shape}')
@@ -36,8 +27,8 @@ def main() -> None:
     X = torch.tensor(x_np, dtype=torch.float32)
     y = X.clone()
     dataset = TensorDataset(X, y)
-    train_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    test_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     print('-------------- DATA SHAPE ----------------')
     for X, y in test_dataloader:
@@ -66,7 +57,7 @@ def main() -> None:
     print('-------------------------------------------------\n')
 
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     def train_epoch() -> None:
         model.train()
@@ -99,7 +90,7 @@ def main() -> None:
         test_loss /= num_batches
         print(f'Test Error:\n Avg loss: {test_loss:>8f}\n')
 
-    for t in range(args.epochs):
+    for t in range(epochs):
         print(f'Epoch {t + 1}:\n-------------------------------')
         train_epoch()
         evaluate()
