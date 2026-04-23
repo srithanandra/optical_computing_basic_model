@@ -6,7 +6,10 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from src.model import MLP
+try:
+    from src.model import MLP
+except ModuleNotFoundError:
+    from model import MLP
 
 
 def main() -> None:
