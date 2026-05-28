@@ -14,9 +14,11 @@ except ModuleNotFoundError:
 try:
     from src.forward_model import load_forward_model
     from src.inverse_model import load_inverse_model
+    import src.resnet_inverse
 except ModuleNotFoundError:
     from forward_model import load_forward_model
     from inverse_model import load_inverse_model
+    import resnet_inverse
 
 
 class InverseForwardTandem(nn.Module):
@@ -82,6 +84,10 @@ def export_tandem_data(model, dataset, export_path, *, batch_size, device):
     )
 
 
+def regression_accuracy(pred, target, *, rtol=0.05, atol=1e-8):
+    return torch.isclose(pred, target, rtol=rtol, atol=atol).float().mean().item() * 100.0
+
+
 def plot_loss_history(loss_history, plot_path):
     if plt is None:
         print('Skipping loss plot because matplotlib is not installed.')
@@ -109,6 +115,31 @@ def plot_loss_history(loss_history, plot_path):
     plt.close()
 
 
+def plot_accuracy_history(accuracy_history, plot_path):
+    if plt is None:
+        print('Skipping accuracy plot because matplotlib is not installed.')
+        print('Install it with: pip install matplotlib')
+        return
+
+    epochs = np.arange(1, len(accuracy_history['train_spectrum']) + 1)
+
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.figure(figsize=(10, 5))
+    plt.plot(epochs, accuracy_history['train_spectrum'], label='Train spectrum accuracy')
+    plt.plot(epochs, accuracy_history['test_spectrum'], label='Test spectrum accuracy')
+    plt.plot(epochs, accuracy_history['train_geometry'], label='Train geometry accuracy')
+    plt.plot(epochs, accuracy_history['test_geometry'], label='Test geometry accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy (% within tolerance)')
+    plt.title('Tandem inverse-forward accuracy over time')
+    plt.ylim(0, 100)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=200)
+    plt.close()
+
+
 def main() -> None:
     start = time.time()
 
@@ -117,9 +148,10 @@ def main() -> None:
     trained_inverse_checkpoint_path = Path('data') / 'other' / 'inverse_model_tandem_trained.pth'
     export_path = Path('data') / 'exported_models' / 'inverse_forward_export.npz'
     loss_plot_path = Path('data') / 'plot_images' / 'inverse_forward_loss.png'
+    accuracy_plot_path = Path('data') / 'plot_images' / 'inverse_forward_accuracy.png'
     batch_size = 64
     epochs = 100
-    lr = 1e-3
+    lr = 1e-5
     train_fraction = 0.8
     geometry_loss_weight = 1.0
 
@@ -159,7 +191,7 @@ def main() -> None:
     #     break
     # print('------------------------------------------\n')
 
-    inverse_model = load_inverse_model(initial_inverse_checkpoint_path, device=device)
+    inverse_model = resnet_inverse.load_inverse_model(device=device) # CHANGE THIS LATER *****************
     model = InverseForwardTandem(inverse_model, forward_model_mlp).to(device)
     print('---------------------- MODEL ---------------------')
     print(model)
@@ -176,6 +208,12 @@ def main() -> None:
         'test_spectrum': [],
         'test_geometry': [],
     }
+    accuracy_history = {
+        'train_spectrum': [],
+        'train_geometry': [],
+        'test_spectrum': [],
+        'test_geometry': [],
+    }
 
     def train_epoch():
         model.train()
@@ -184,6 +222,8 @@ def main() -> None:
         total_loss_sum = 0.0
         total_spectrum_loss = 0.0
         total_geometry_loss = 0.0
+        total_spectrum_accuracy = 0.0
+        total_geometry_accuracy = 0.0
         for batch, (spectrum, geometry_target) in enumerate(train_dataloader):
             spectrum = spectrum.to(device)
             geometry_target = geometry_target.to(device)
@@ -192,6 +232,8 @@ def main() -> None:
             spectrum_loss = spectrum_loss_fn(reconstructed_spectrum, spectrum)
             geometry_loss = geometry_loss_fn(predicted_geometry, geometry_target)
             loss = spectrum_loss + geometry_loss_weight * geometry_loss
+            spectrum_accuracy = regression_accuracy(reconstructed_spectrum, spectrum)
+            geometry_accuracy = regression_accuracy(predicted_geometry, geometry_target)
 
             loss.backward()
             optimizer.step()
@@ -200,6 +242,8 @@ def main() -> None:
             total_loss_sum += loss.item() * len(spectrum)
             total_spectrum_loss += spectrum_loss.item() * len(spectrum)
             total_geometry_loss += geometry_loss.item() * len(spectrum)
+            total_spectrum_accuracy += spectrum_accuracy * len(spectrum)
+            total_geometry_accuracy += geometry_accuracy * len(spectrum)
 
             if batch % 20 == 0:
                 current = min((batch + 1) * len(spectrum), size)
@@ -207,10 +251,18 @@ def main() -> None:
                     f'total loss: {loss.item():>7f}  '
                     f'spectrum loss: {spectrum_loss.item():>7f}  '
                     f'geometry ref loss: {geometry_loss.item():>7f}  '
+                    f'spectrum acc: {spectrum_accuracy:>6.2f}%  '
+                    f'geometry acc: {geometry_accuracy:>6.2f}%  '
                     f'[{current:>5d}/{size:>5d}]'
                 )
 
-        return total_loss_sum / size, total_spectrum_loss / size, total_geometry_loss / size
+        return (
+            total_loss_sum / size,
+            total_spectrum_loss / size,
+            total_geometry_loss / size,
+            total_spectrum_accuracy / size,
+            total_geometry_accuracy / size,
+        )
 
     def evaluate():
         model.eval()
@@ -218,6 +270,8 @@ def main() -> None:
         total_loss_sum = 0.0
         test_spectrum_loss = 0.0
         test_geometry_loss = 0.0
+        test_spectrum_accuracy = 0.0
+        test_geometry_accuracy = 0.0
         with torch.no_grad():
             for spectrum, geometry_target in test_dataloader:
                 spectrum = spectrum.to(device)
@@ -227,26 +281,52 @@ def main() -> None:
                 spectrum_loss = spectrum_loss_fn(reconstructed_spectrum, spectrum)
                 geometry_loss = geometry_loss_fn(predicted_geometry, geometry_target)
                 loss = spectrum_loss + geometry_loss_weight * geometry_loss
+                spectrum_accuracy = regression_accuracy(reconstructed_spectrum, spectrum)
+                geometry_accuracy = regression_accuracy(predicted_geometry, geometry_target)
 
                 total_loss_sum += loss.item() * len(spectrum)
                 test_spectrum_loss += spectrum_loss.item() * len(spectrum)
                 test_geometry_loss += geometry_loss.item() * len(spectrum)
+                test_spectrum_accuracy += spectrum_accuracy * len(spectrum)
+                test_geometry_accuracy += geometry_accuracy * len(spectrum)
 
         test_total_loss = total_loss_sum / size
         test_spectrum_loss /= size
         test_geometry_loss /= size
+        test_spectrum_accuracy /= size
+        test_geometry_accuracy /= size
         print(
             'Test Error:\n'
             f' Avg total loss: {test_total_loss:>8f}\n'
             f' Avg spectrum loss: {test_spectrum_loss:>8f}\n'
             f' Avg geometry ref loss: {test_geometry_loss:>8f}\n'
+            f' Spectrum accuracy: {test_spectrum_accuracy:>6.2f}%\n'
+            f' Geometry accuracy: {test_geometry_accuracy:>6.2f}%\n'
         )
-        return test_total_loss, test_spectrum_loss, test_geometry_loss
+        return (
+            test_total_loss,
+            test_spectrum_loss,
+            test_geometry_loss,
+            test_spectrum_accuracy,
+            test_geometry_accuracy,
+        )
 
     for t in range(epochs):
         print(f'Epoch {t + 1}:\n-------------------------------')
-        train_total_loss, train_spectrum_loss, train_geometry_loss = train_epoch()
-        test_total_loss, test_spectrum_loss, test_geometry_loss = evaluate()
+        (
+            train_total_loss,
+            train_spectrum_loss,
+            train_geometry_loss,
+            train_spectrum_accuracy,
+            train_geometry_accuracy,
+        ) = train_epoch()
+        (
+            test_total_loss,
+            test_spectrum_loss,
+            test_geometry_loss,
+            test_spectrum_accuracy,
+            test_geometry_accuracy,
+        ) = evaluate()
 
         loss_history['train_total'].append(train_total_loss)
         loss_history['train_spectrum'].append(train_spectrum_loss)
@@ -254,12 +334,19 @@ def main() -> None:
         loss_history['test_total'].append(test_total_loss)
         loss_history['test_spectrum'].append(test_spectrum_loss)
         loss_history['test_geometry'].append(test_geometry_loss)
+        accuracy_history['train_spectrum'].append(train_spectrum_accuracy)
+        accuracy_history['train_geometry'].append(train_geometry_accuracy)
+        accuracy_history['test_spectrum'].append(test_spectrum_accuracy)
+        accuracy_history['test_geometry'].append(test_geometry_accuracy)
 
     torch.save(model.inverse_model.state_dict(), trained_inverse_checkpoint_path)
     print(f'Saved trained CNN inverse checkpoint to {trained_inverse_checkpoint_path}')
 
     plot_loss_history(loss_history, loss_plot_path)
     print(f'Saved loss plot to {loss_plot_path}')
+
+    plot_accuracy_history(accuracy_history, accuracy_plot_path)
+    print(f'Saved accuracy plot to {accuracy_plot_path}')
 
     export_tandem_data(model, dataset, export_path, batch_size=batch_size, device=device)
     print(f'Exported tandem data to {export_path}')
